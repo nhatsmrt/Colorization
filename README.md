@@ -6,8 +6,14 @@ Based on Izuka et al's paper, but using a light(er)-weight model.
 ## Results:
 Some good results:
 ### Grayscale:
-![Grayscale](https://github.com/nhatsmrt/Colorization/blob/master/TestImages/ClassColorNet/1/33_grayscale.png)
+![Grayscale_33](https://github.com/nhatsmrt/Colorization/blob/master/TestImages/ClassColorNet/1/33_grayscale.png)
 ### Colored:
-![Colored](https://github.com/nhatsmrt/Colorization/blob/master/TestImages/ClassColorNet/1/33.png)
+![Colored_33](https://github.com/nhatsmrt/Colorization/blob/master/TestImages/ClassColorNet/1/33.png)
 ### Original:
-![Original](https://github.com/nhatsmrt/Colorization/blob/master/TestImages/ClassColorNet/1/33_original.png)
+![Original_33](https://github.com/nhatsmrt/Colorization/blob/master/TestImages/ClassColorNet/1/33_original.png)
+### Grayscale:
+![Grayscale_10](https://github.com/nhatsmrt/Colorization/blob/master/TestImages/ClassColorNet/1/10_grayscale.png)
+### Colored:
+![Colored_10](https://github.com/nhatsmrt/Colorization/blob/master/TestImages/ClassColorNet/1/10.png)
+### Original:
+![Original_10](https://github.com/nhatsmrt/Colorization/blob/master/TestImages/ClassColorNet/1/10_original.png)
