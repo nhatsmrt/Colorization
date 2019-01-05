@@ -13,49 +13,57 @@ import random
 
 
 
-class ResidualBlock(nn.Module):
+class _ResidualBlockNoBN(nn.Sequential):
 
-    def __init__(self, inp_channel):
-        super(ResidualBlock, self).__init__()
-        self._conv_layer = ConvolutionalLayer(inp_channel, inp_channel, 3, padding = 1)
-        self._relu = nn.LeakyReLU(inplace = True)
-        self._batch_norm = nn.BatchNorm2d(num_features = inp_channel)
-
-
-    def forward(self, x):
-        residual = x
-
-        conv_1 = self._conv_layer(x)
-        conv_2 = self._conv_layer(conv_1)
-
-        res = self._relu(residual + conv_2)
-        res_h = self._batch_norm(res)
-
-        return res_h
-
-class ConvolutionalLayer(nn.Module):
-
-    def __init__(self, in_channels, out_channels, kernel_size = 3, stride = 1, padding = 0, bias = True):
-        super(ConvolutionalLayer, self).__init__()
-        self._conv = nn.Conv2d(
-            in_channels = in_channels,
-            out_channels = out_channels,
-            kernel_size = kernel_size,
-            stride = stride,
-            padding = padding,
-            bias = bias
+    def __init__(self, in_channels):
+        super(_ResidualBlockNoBN, self).__init__()
+        self.add_module(
+            "main",
+            nn.Sequential(
+                ConvolutionalLayer(in_channels, in_channels, 3, padding=1),
+                nn.Conv2d(
+                    in_channels = in_channels, out_channels = in_channels,
+                    kernel_size = 3, stride = 1, padding = 1, bias = True
+                ),
+                nn.LeakyReLU()
+            )
         )
-        self._relu = nn.LeakyReLU(inplace = True)
-        self._batch_norm = nn.BatchNorm2d(num_features = out_channels)
+
+    def forward(self, input):
+        return super(_ResidualBlockNoBN, self).forward(input) + input
+
+class ResidualBlock(nn.Sequential):
+    def __init__(self, in_channels):
+        super(ResidualBlock, self).__init__()
+        self.add_module(
+            "main",
+            nn.Sequential(
+                _ResidualBlockNoBN(in_channels),
+                nn.BatchNorm2d(in_channels)
+            )
+        )
 
 
-    def forward(self, x):
 
-        conv = self._conv(x)
-        a = self._relu(conv)
-        h = self._batch_norm(a)
+class ConvolutionalLayer(nn.Sequential):
 
-        return h
+    def __init__(self, in_channels, out_channels, kernel_size = 3, stride = 1, padding = 0, bias = True, activation = nn.LeakyReLU):
+        super(ConvolutionalLayer, self).__init__()
+        self.add_module(
+            "main",
+            nn.Sequential(
+                nn.Conv2d(
+                    in_channels = in_channels,
+                    out_channels = out_channels,
+                    kernel_size = kernel_size,
+                    stride = stride,
+                    padding = padding,
+                    bias = bias
+                ),
+                activation(inplace=True),
+                nn.BatchNorm2d(num_features=out_channels)
+            )
+        )
 
 class Flatten(nn.Module):
     def forward(self, input):
@@ -66,46 +74,52 @@ class Flatten(nn.Module):
 class ResizeConvolutionalLayer(nn.Module):
     def __init__(self, in_channels, out_channels):
         super(ResizeConvolutionalLayer, self).__init__()
-        self._conv = nn.Conv2d(
-            in_channels = in_channels,
-            out_channels = out_channels,
-            kernel_size = 3,
-            padding = 1
+        self.add_module(
+            "conv",
+            nn.Conv2d(
+                in_channels = in_channels,
+                out_channels = out_channels,
+                kernel_size = 3,
+                padding = 1
+            )
         )
 
     def forward(self, input, out_h, out_w):
         upsampled = F.interpolate(input, size = (out_h, out_w), mode = 'bilinear')
-        conv = self._conv(upsampled)
-        return conv
+        return self._modules["conv"](upsampled)
 
-
-class DenseLayer(nn.Module):
+# UNTESTED
+class DenseLayer(nn.Sequential):
     def __init__(self, in_channels, growth_rate):
         super(DenseLayer, self).__init__()
 
-        self._main = nn.Sequential(
-            nn.BatchNorm2d(num_features = in_channels),
-            nn.ReLU(inplace = True),
-            ConvolutionalLayer(
-                in_channels = in_channels,
-                out_channels = growth_rate,
-                kernel_size = 1,
-                stride = 1,
-                bias = False
-            ),
-            nn.Conv2d(
-                in_channels = growth_rate,
-                out_channels = growth_rate,
-                kernel_size = 3,
-                stride = 1,
-                padding=1,
-                bias = False
+        self.add_module(
+            "main",
+            nn.Sequential(
+                nn.BatchNorm2d(num_features = in_channels),
+                nn.ReLU(inplace = True),
+                ConvolutionalLayer(
+                    in_channels = in_channels,
+                    out_channels = growth_rate,
+                    kernel_size = 1,
+                    stride = 1,
+                    bias = False
+                ),
+                nn.Conv2d(
+                    in_channels = growth_rate,
+                    out_channels = growth_rate,
+                    kernel_size = 3,
+                    stride = 1,
+                    padding=1,
+                    bias = False
+                )
             )
         )
 
     def forward(self, input):
-        return torch.cat((input, self._main(input)), dim = 1)
+        return torch.cat((input, super(DenseLayer, self).forward(input)), dim = 1)
 
+# UNTESTED
 class DenseBlock(nn.Sequential):
     def __init__(self, in_channels, growth_rate, num_layers):
         super(DenseBlock, self).__init__()
@@ -127,13 +141,16 @@ def spatial_pyramid_pool(input, op_sizes, pool_layer = nn.MaxPool2d):
     inp_h = input.shape[2]
     inp_w = input.shape[3]
 
+
     for size in op_sizes:
         pool = pool_layer(
-            kernel_size = (torch.ceil(inp_h / size), torch.ceil(inp_w / size)),
-            stride = (torch.floor(inp_h / size), torch.floor(inp_w / size))
+            kernel_size = (torch.ceil(torch.Tensor([inp_h / size])), torch.ceil(torch.Tensor([inp_w / size]))),
+            stride = (torch.floor(torch.Tensor([inp_h / size])), torch.floor(torch.Tensor([inp_w / size])))
         )
-        ops.append(pool(input).view(batch_size, inp_c, -1))
+        ops.append(pool(input).view(batch_size, -1))
 
+    # for op in ops:
+    #     print(op.shape)
     return torch.cat(ops, dim = -1)
 
 
@@ -170,15 +187,22 @@ class PretrainedModel(nn.Module):
 
         return op
 
-class FusionLayer(nn.Module):
-    def __init__(self):
+class FusionLayer(nn.Sequential):
+    def __init__(self, encoded_channels = 16, features_channels = 512):
         super(FusionLayer, self).__init__()
-        self._conv = ConvolutionalLayer(
-            in_channels = 256 + 16,
-            out_channels = 256
+        self.add_module(
+            "conv",
+            ConvolutionalLayer(
+                in_channels = encoded_channels + features_channels,
+                out_channels = 256
+            )
         )
 
-    def forward(self, encoded, features):
+    def forward(self, input):
+        encoded, features = input
+
+        if encoded.shape[2] < features.shape[2] or encoded.shape[3] < features.shape[3]:
+            raise ValueError
 
         if encoded.shape[2] % features.shape[2] != 0 or encoded.shape[3] % features.shape[3] != 0:
             h_pad = (features.shape[2] - encoded.shape[2] % features.shape[2]) % features.shape[2]
@@ -193,51 +217,66 @@ class FusionLayer(nn.Module):
             encoded.shape[3] // features.shape[3]
         )
         concat = torch.cat((encoded, features), dim = 1)
-        return self._conv(concat)
+        return super(FusionLayer, self).forward(concat)
 
-class Encoder(nn.Module):
+class Encoder(nn.Sequential):
     def __init__(self):
         super(Encoder, self).__init__()
-        self._main = nn.Sequential(
-            ConvolutionalLayer(
-                in_channels = 1,
-                stride = 2,
-                out_channels = 8
-            ),
-            ResidualBlock(inp_channel = 8),
-            ConvolutionalLayer(
-                in_channels = 8,
-                stride = 2,
-                out_channels = 16
-            ),
+        self.add_module(
+            "main",
+            nn.Sequential(
+                ConvolutionalLayer(
+                    in_channels = 1,
+                    stride = 2,
+                    out_channels = 8
+                ),
+                ResidualBlock(in_channels = 8),
+                ConvolutionalLayer(
+                    in_channels = 8,
+                    stride = 2,
+                    out_channels = 16
+                ),
+                ResidualBlock(in_channels = 16)
+            )
         )
-
-    def forward(self, input):
-        return self._main(input)
 
 class Decoder(nn.Module):
     def __init__(self):
         super(Decoder, self).__init__()
 
-        self._upsample1 = ResizeConvolutionalLayer(
-            in_channels = 256,
-            out_channels = 64
+        self.add_module(
+            "upsample1",
+            ResizeConvolutionalLayer(
+                in_channels = 256,
+                out_channels = 64
+            )
         )
-        self._res1 = ResidualBlock(
-            inp_channel = 64
+        self.add_module(
+            "res1",
+            ResidualBlock(
+                in_channels = 64
+            )
         )
-        self._upsample2 = ResizeConvolutionalLayer(
-            in_channels = 64,
-            out_channels = 2
+        self.add_module(
+            "upsample2",
+            ResizeConvolutionalLayer(
+                in_channels = 64,
+                out_channels = 2
+            )
         )
 
 
 
     def forward(self, input, img_h = None, img_w = None):
 
-        upsample1 = F.relu(self._upsample1(input, img_h // 2, img_w // 2))
-        res1 = self._res1(upsample1)
-        return torch.tanh(self._upsample2(res1, img_h, img_w))
+        upsample1 = F.relu(self._modules["upsample1"](input, img_h // 2, img_w // 2))
+        res1 = self._modules["res1"](upsample1)
+        return torch.tanh(self._modules["upsample2"](res1, img_h, img_w))
+
+
+
+
+
 
 
 

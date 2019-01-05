@@ -32,6 +32,43 @@ def create_data(data_path, N_IMG_MAX):
 
     return np.array(x), np.array(y)
 
+def create_data_places(data_path, N_IMG_MAX_PER_CLASS = 500, N_CLASS_MAX = 256):
+
+    x = []
+    ab = []
+    y = []
+
+    n_classes = 0
+
+    for letter in os.listdir(data_path):
+        if letter != ".DS_Store":
+            for class_name in os.listdir(data_path + letter + "/"):
+                n_classes += 1
+                n_img_processed = 0
+
+                if class_name != ".DS_Store":
+                    for file in os.listdir(data_path + letter + "/" + class_name + "/"):
+                        if file.endswith('.png') or file.endswith('.jpg'):
+                            y.append(n_classes - 1)
+
+                            img_path = data_path + letter + "/" + class_name + "/" + file
+                            image = cv2.imread(img_path)
+                            image_lab = cv2.cvtColor(image, cv2.COLOR_BGR2LAB)
+                            x.append(image_lab[:, :, 0].reshape(128, 128, 1).astype(np.float32))
+
+                            # Convert the original image to Lab, taking only the latter dimensions:
+                            ab.append(image_lab[:, :, 1:3])
+                            n_img_processed += 1
+
+                            if n_img_processed == N_IMG_MAX_PER_CLASS:
+                                break
+
+                    if n_classes == N_CLASS_MAX:
+                        return np.array(x), np.array(ab), np.array(y), n_classes
+
+    return np.array(x), np.array(ab), np.array(y), n_classes
+
+
 
 def oh_encode(ab):
     batch_size = ab.shape[0]

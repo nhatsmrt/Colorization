@@ -67,6 +67,7 @@ class KoalarizationNet:
                 X_val_batch = X_val[val_idx]
                 y_val_batch = y_val[val_idx]
 
+                self._network.eval()
                 cur_loss = self._loss(
                     self._network(self.__preprocess(X_val_batch)),
                     self.__preprocess(y_val_batch)
@@ -160,19 +161,18 @@ class KoalarizationNet:
 class _MainNetworkKoala(nn.Module):
     def __init__(self):
         super(_MainNetworkKoala, self).__init__()
-        self._enc = Encoder()
-        self._pre = PretrainedModel(last_layer = 27, fine_tune = False)
-        self._fusion = FusionLayer()
-
-        self._dec = Decoder()
+        self.add_module("enc", Encoder())
+        self._pre = PretrainedModel(fine_tune = False)
+        self.add_module("fusion", FusionLayer())
+        self.add_module("dec", Decoder())
 
 
     def forward(self, input):
-        encoded = self._enc(input)
+        encoded = self._modules["enc"](input)
         features = self._pre(self.__pretrained_preprocess(input))[0]
-        # print(features.shape[0])
-        fused = self._fusion(encoded, features)
-        return self._dec(fused, input.shape[2], input.shape[3])
+        fused = self._modules["fusion"]((encoded, features))
+
+        return self._modules["dec"](fused, input.shape[2], input.shape[3])
 
     def __pretrained_preprocess(self, input):
         return input.repeat(1, 3, 1, 1)
